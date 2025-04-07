@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>World Choropleth with Draggable Stacked Bar Chart</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .visualization {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .map-container {
+        flex: 1;
+        min-width: 500px;
+      }
+      .bar-container {
+        flex: 1;
+        min-width: 500px;
+        height: 600px;
+        overflow: hidden;
+        position: relative;
+        cursor: grab;
+      }
+      .bar-container:active {
+        cursor: grabbing;
+      }
+      .scrollable-bars {
+        position: absolute;
+        width: 100%;
+        transition: transform 0.5s;
+      }
+      .controls {
+        margin: 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .slider-container {
+        flex-grow: 1;
+        position: relative;
+      }
+      #year-slider {
+        width: 100%;
+        margin-bottom: 15px;
+      }
+      .slider-ticks {
+        position: relative;
+        height: 20px;
+        width: 100%;
+      }
+      .slider-tick {
+        position: absolute;
+        font-size: 12px;
+        color: #666;
+        transform: translateX(-50%);
+        white-space: nowrap;
+      }
+      .slider-tick::before {
+        content: "";
+        position: absolute;
+        width: 1px;
+        height: 5px;
+        background-color: #666;
+        top: -8px;
+        left: 50%;
+      }
+      .country {
+        stroke: #fff;
+        stroke-width: 0.5px;
+      }
+      .country:hover {
+        stroke: #000;
+        stroke-width: 1px;
+      }
+      .tooltip {
+        position: absolute;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #ddd;
+        pointer-events: none;
+        font-size: 12px;
+        z-index: 100;
+      }
+      .bar-group {
+        cursor: pointer;
+        transition: opacity 0.3s;
+      }
+      .bar-group:hover .bar {
+        opacity: 0.8;
+      }
+      .bar-group.highlighted .bar {
+        stroke: #000;
+        stroke-width: 2px;
+      }
+      .bar-label {
+        font-size: 10px;
+        pointer-events: none;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-right: 15px;
+        margin-bottom: 5px;
+      }
+      .legend-color {
+        width: 15px;
+        height: 15px;
+        margin-right: 5px;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .year-display {
+        font-size: 24px;
+        font-weight: bold;
+        min-width: 80px;
+        text-align: center;
+      }
+      .grid-line {
+        stroke: #ddd;
+        stroke-dasharray: 4;
+        stroke-width: 1;
+      }
+      .axis text {
+        font-size: 10px;
+      }
+      .axis path {
+        display: none;
+      }
+      .axis .tick line {
+        display: none;
+      }
+
+      #play-button {
+        background: transparent;
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        color: #a0a0a0;
+        font-size: 16px;
+        padding: 6px 16px;
+        cursor: pointer;
+        font-weight: normal;
+        text-align: center;
+        transition: all 0.2s ease;
+      }
+
+      #play-button:hover {
+        background-color: #f5f5f5;
+      }
+
+      #play-button:active {
+        background-color: #e8e8e8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Global CO2 Emissions by Source (1750-2023)</h1>
+
+      <div class="visualization">
+        <div class="map-container" id="map"></div>
+        <div class="bar-container" id="bar-chart">
+          <div class="scrollable-bars" id="scrollable-bars"></div>
+        </div>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="controls">
+        <button id="play-button">▶ Play</button>
+        <div class="slider-container">
+          <input
+            type="range"
+            id="year-slider"
+            min="0"
+            max="9"
+            value="0"
+            step="1"
+          />
+          <div class="slider-ticks" id="slider-ticks"></div>
+        </div>
+        <div class="year-display" id="year-display">2010</div>
+      </div>
+    </div>
+
+    <script>
+      // Configuration
+      const mapWidth = 550;
+      const mapHeight = 500;
+      const barWidth = 550;
+      const barHeight = 3000; // Long enough to fit all countries
+      const barChartVisibleHeight = 600;
+      const barHeight_perCountry = 25;
+      const margin = { top: 30, right: 120, bottom: 10, left: 150 };
+      const years = [];
+      for (let i = 1750; i <= 2023; i++) {
+        years.push(i);
+      }
+      // const categories = ["Industry", "Agriculture", "Services"];
+      const categories = [
+        "cement_co2",
+        "coal_co2",
+        "flaring_co2",
+        "gas_co2",
+        "land_use_change_co2",
+        "oil_co2",
+        "other_industry_co2",
+      ];
+      const categoryColors = [
+        "#1f77b4",
+        "#2ca02c",
+        "#ff7f0e",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+      ];
+
+      // Generate synthetic data
+      function generateData() {
+        const countries = {};
+        const world = {};
+
+        // Create synthetic data for each year
+        years.forEach((year) => {
+          world[year] = {};
+        });
+
+        return { countries, world };
+      }
+
+      const data = generateData();
+      let currentYearIndex = 0;
+      let isPlaying = false;
+      let playInterval;
+      let selectedCountry = null;
+      let isDragging = false;
+      let dragStartY = 0;
+      let currentScrollY = 0;
+
+      // Set up map projection
+      const projection = d3
+        .geoNaturalEarth1()
+        .scale(mapWidth / 6)
+        .translate([mapWidth / 2, mapHeight / 2]);
+
+      const path = d3.geoPath().projection(projection);
+
+      // Create SVG for map
+      const mapSvg = d3
+        .select("#map")
+        .append("svg")
+        .attr("width", mapWidth)
+        .attr("height", mapHeight);
+
+      // Create SVG for bar chart
+      const barSvg = d3
+        .select("#scrollable-bars")
+        .append("svg")
+        .attr("width", barWidth)
+        .attr("height", barHeight);
+
+      // Create tooltip
+      const tooltip = d3
+        .select("body")
+        .append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+      // Create color scales
+      const colorScale = d3
+        .scaleSequential(d3.interpolateBlues)
+        .domain([0, 100]);
+
+      // Add category legend
+      const legend = d3.select("#legend");
+
+      categories.forEach((category, i) => {
+        const legendItem = legend.append("div").attr("class", "legend-item");
+
+        legendItem
+          .append("div")
+          .attr("class", "legend-color")
+          .style("background-color", categoryColors[i]);
+
+        legendItem.append("span").text(category);
+      });
+
+      // Set up slider ticks
+      // const sliderTicks = d3.select("#slider-ticks");
+      // years.forEach((year, index) => {
+      //   sliderTicks.append("div").attr("class", "tick").text(year);
+      // });
+      const sliderTicks = d3.select("#slider-ticks");
+      sliderTicks.selectAll("*").remove(); // Clear existing ticks
+
+      const totalYears = years.length;
+      const maxTicks = 10; // Maximum number of ticks to show to prevent overlap
+
+      // Calculate step size to limit the number of displayed ticks
+      const stepSize = Math.ceil(totalYears / maxTicks);
+
+      // Only show subset of years based on step size
+      for (let i = 0; i < totalYears; i += stepSize) {
+        sliderTicks
+          .append("div")
+          .attr("class", "slider-tick")
+          .style("left", `${(i / (totalYears - 1)) * 100}%`)
+          .text(years[i]);
+      }
+
+      // Always show the last year
+      if ((totalYears - 1) % stepSize !== 0) {
+        sliderTicks
+          .append("div")
+          .attr("class", "slider-tick")
+          .style("left", "100%")
+          .text(years[totalYears - 1]);
+      }
+
+      // Set up slider and play button
+      const yearSlider = d3.select("#year-slider");
+      const yearDisplay = d3.select("#year-display");
+      const playButton = d3.select("#play-button");
+
+      yearSlider
+        .attr("min", 0)
+        .attr("max", years.length - 1)
+        .attr("value", currentYearIndex)
+        .attr("step", 1);
+
+      yearSlider.on("input", function () {
+        currentYearIndex = +this.value;
+        updateVisualization(false);
+      });
+
+      function updateYearDisplay() {
+        d3.select("#year-display").text(years[currentYearIndex]);
+      }
+      updateYearDisplay();
+
+      playButton.on("click", togglePlay);
+
+      function togglePlay() {
+        isPlaying = !isPlaying;
+
+        if (isPlaying) {
+          playButton.text("⏸ Pause");
+          playInterval = setInterval(advanceYear, 1500);
+        } else {
+          playButton.text("▶ Play");
+          clearInterval(playInterval);
+        }
+      }
+
+      function advanceYear() {
+        if (currentYearIndex >= years.length - 1) {
+          clearInterval(playInterval);
+          playButton.text("▶ Play");
+          isPlaying = false;
+          currentYearIndex = 0;
+          return;
+        }
+
+        currentYearIndex += 1;
+        yearSlider.node().value = currentYearIndex;
+        updateVisualization(false);
+      }
+
+      // Setup dragging for bar chart
+      const barContainer = d3.select("#bar-chart");
+      const scrollableDiv = d3.select("#scrollable-bars");
+
+      barContainer.on("mousedown", function (event) {
+        isDragging = true;
+        dragStartY = event.clientY;
+        currentScrollY =
+          parseFloat(
+            scrollableDiv.style("transform").replace("translateY(", "")
+          ) || 0;
+
+        // Disable transition during dragging
+        scrollableDiv.style("transition", "none");
+
+        // Prevent default behavior to avoid text selection
+        event.preventDefault();
+      });
+
+      d3.select("body").on("mousemove", function (event) {
+        if (isDragging) {
+          const deltaY = event.clientY - dragStartY;
+          const newY = Math.min(
+            0,
+            Math.max(
+              -barHeight + barChartVisibleHeight,
+              currentScrollY + deltaY
+            )
+          );
+          scrollableDiv.style("transform", `translateY(${newY}px)`);
+        }
+      });
+
+      d3.select("body").on("mouseup", function () {
+        if (isDragging) {
+          isDragging = false;
+          // Restore transition after dragging
+          scrollableDiv.style("transition", "transform 0.5s");
+        }
+      });
+
+      // Prevent drag conflicts
+      barContainer.on("click", function (event) {
+        event.stopPropagation();
+      });
+
+      // Load world map data
+      d3.json("countries-110m.json").then(async function (worldData) {
+        const countries = topojson.feature(
+          worldData,
+          worldData.objects.countries
+        ).features;
+
+        const co2Data = await d3.json("co2-data-preprocessed-vis-3.json");
+
+        // Generate random data for each country
+        countries.forEach((country) => {
+          const countryName =
+            country.properties.name || `Country-${country.id}`;
+          data.countries[country.id] = {
+            id: country.id,
+            name: countryName,
+          };
+
+          function scalePopulation(population, base = 10, multiplier = 1) {
+            // Avoid log(0) which is -Infinity
+            if (population <= 0) return 0;
+
+            // Apply logarithmic scaling
+            return (Math.log(population) / Math.log(base)) * multiplier;
+          }
+
+          // Generate yearly data with varying totals
+          years.forEach((year) => {
+            if (!data.world[year][country.id]) {
+              data.world[year][country.id] = {
+                total: co2Data[year][countryName]?.total || 0,
+                population: co2Data[year][countryName]?.population || 0,
+                scaledPopulation: scalePopulation(
+                  co2Data[year][countryName]?.population || 0
+                ),
+                gdp: co2Data[year][countryName]?.gdp || 0,
+                categories: {
+                  cement_co2: co2Data[year][countryName]?.cement_co2 || 0,
+                  coal_co2: co2Data[year][countryName]?.coal_co2 || 0,
+                  flaring_co2: co2Data[year][countryName]?.flaring_co2 || 0,
+                  gas_co2: co2Data[year][countryName]?.gas_co2 || 0,
+                  land_use_change_co2:
+                    co2Data[year][countryName]?.land_use_change_co2 || 0,
+                  oil_co2: co2Data[year][countryName]?.oil_co2 || 0,
+                  other_industry_co2:
+                    co2Data[year][countryName]?.other_industry_co2 || 0,
+                },
+              };
+            }
+          });
+        });
+
+        // Draw map
+        mapSvg
+          .selectAll(".country")
+          .data(countries)
+          .enter()
+          .append("path")
+          .attr("class", "country")
+          .attr("d", path)
+          .attr("id", (d) => `country-${d.id}`)
+          .on("mouseover", handleCountryMouseOver)
+          .on("mouseout", handleCountryMouseOut)
+          .on("click", handleCountryClick);
+
+        // Add x-axis for the bar chart
+        const xScale = d3
+          .scaleLinear()
+          .domain([0, 300]) // Max value is 300
+          .range([margin.left, barWidth - margin.right]);
+
+        // Add axis at the top
+        const xAxis = d3.axisTop(xScale).ticks(5);
+
+        barSvg
+          .append("g")
+          .attr("class", "axis x-axis")
+          .attr("transform", `translate(0, ${margin.top - 10})`)
+          .call(xAxis);
+
+        // Add vertical grid lines
+        const gridValues = xScale.ticks(5);
+        barSvg
+          .selectAll(".grid-line")
+          .data(gridValues)
+          .enter()
+          .append("line")
+          .attr("class", "grid-line")
+          .attr("x1", (d) => xScale(d))
+          .attr("y1", margin.top)
+          .attr("x2", (d) => xScale(d))
+          .attr("y2", barHeight);
+
+        // Set up bar chart
+        initializeBarChart(xScale);
+
+        // Initial update
+        updateVisualization(true);
+
+        circleLegend();
+      });
+
+      function initializeBarChart(xScale) {
+        const countryIds = Object.keys(data.countries);
+        const year = years[currentYearIndex];
+
+        // Sort countries by total value descending
+        countryIds.sort((a, b) => {
+          const totalA = data.world[year][a]?.total || 0;
+          const totalB = data.world[year][b]?.total || 0;
+          return totalB - totalA;
+        });
+
+        // Create group for each country
+        barSvg
+          .selectAll(".bar-group")
+          .data(countryIds)
+          .enter()
+          .append("g")
+          .attr("class", "bar-group")
+          .attr("id", (d) => `bar-${d}`)
+          .attr(
+            "transform",
+            (d, i) => `translate(0, ${i * barHeight_perCountry + margin.top})`
+          )
+          .on("mouseover", handleBarMouseOver)
+          .on("mouseout", handleBarMouseOut)
+          .on("click", handleBarClick);
+
+        // Add country labels
+        barSvg
+          .selectAll(".bar-group")
+          .append("text")
+          .attr("class", "bar-label country-name")
+          .attr("x", margin.left - 5)
+          .attr("y", barHeight_perCountry / 2)
+          .attr("text-anchor", "end")
+          .attr("alignment-baseline", "middle")
+          .text((d) => data.countries[d].name);
+      }
+
+      // Add zoom and pan functionality to the map
+      let currentTransform = d3.zoomIdentity;
+      const mapZoom = d3
+        .zoom()
+        .scaleExtent([1, 8]) // Min and max zoom levels
+        .on("zoom", (event) => {
+          currentTransform = event.transform;
+          mapSvg
+            .selectAll("path, .gdp-circle")
+            .attr("transform", event.transform);
+        });
+
+      // Apply zoom to map SVG
+      mapSvg.call(mapZoom).on("dblclick.zoom", null); // Disable double-click zoom
+
+      // Add reset button for map zoom
+      const resetButton = d3
+        .select(".container")
+        .insert("button", ".visualization")
+        .attr("id", "reset-map")
+        .style("position", "absolute")
+        .style("top", "80px")
+        .style("left", "30px")
+        .style("z-index", "100")
+        .style("padding", "5px 10px")
+        .style("background", "rgba(255, 255, 255, 0.8)")
+        .style("border", "1px solid #ccc")
+        .style("border-radius", "4px")
+        .style("cursor", "pointer")
+        .text("Reset Map")
+        .on("click", function () {
+          mapSvg
+            .transition()
+            .duration(750)
+            .call(mapZoom.transform, d3.zoomIdentity);
+        });
+
+      function updateVisualization(isInitial) {
+        updateYearDisplay();
+
+        const year = years[currentYearIndex];
+        yearDisplay.text(year);
+
+        // Sort countries by total value descending
+        const countryIds = Object.keys(data.countries);
+        countryIds.sort((a, b) => {
+          const totalA = data.world[year][a]?.total || 0;
+          const totalB = data.world[year][b]?.total || 0;
+          return totalB - totalA;
+        });
+
+        // Update choropleth
+        const maxScaled = {};
+        for (const year of years) {
+          maxScaled[year] = d3.max(
+            Object.values(data.world[year]),
+            (d) => d?.scaledPopulation || 0
+          );
+        }
+
+        mapSvg
+          .selectAll(".country")
+          .transition()
+          .duration(isInitial ? 0 : 750)
+          .attr("fill", (d) => {
+            const countryData = data.world[year][d.id];
+
+            if (countryData) {
+              // Use services as the choropleth value
+              return countryData["population"] == 0
+                ? "grey"
+                : colorScale(
+                    (countryData["scaledPopulation"] / maxScaled[year]) * 100
+                  );
+            }
+            return "#ccc"; // Default color for countries without data
+          });
+        // .attr("stroke", "#000")
+        // .attr("stroke-width", 0.5);
+
+        // Add GDP circles
+        addGDPCircles();
+
+        // Update bar positions based on new sort order
+        countryIds.forEach((countryId, index) => {
+          const barGroup = d3.select(`#bar-${countryId}`);
+
+          barGroup
+            .transition()
+            .duration(isInitial ? 0 : 750)
+            .attr(
+              "transform",
+              `translate(0, ${index * barHeight_perCountry + margin.top})`
+            );
+        });
+
+        // Update bars
+        updateBars(isInitial);
+
+        // If a country is selected, keep it highlighted
+        if (selectedCountry) {
+          highlightCountry(selectedCountry, true);
+        }
+
+        const countryData = data.world[year][latestHoverCountryId];
+        const countryName = data.countries[latestHoverCountryId]?.name;
+
+        if (countryData) {
+          let tooltipContent = `<strong>${countryName}</strong><br>`;
+          tooltipContent += `<strong>Population: ${formatAsThousands(
+            countryData.population
+          )}</strong><br>`;
+          tooltipContent += `<strong>GDP: ${formatAsThousands(
+            countryData.gdp
+          )}</strong>`;
+
+          tooltip.html(tooltipContent);
+        }
+      }
+
+      function updateBars(isInitial) {
+        const year = years[currentYearIndex];
+
+        // Create the scale here to use latest data
+        const maxTotal = d3.max(
+          Object.values(data.world[year]),
+          (d) => d?.total || 0
+        );
+        const xScale = d3
+          .scaleLinear()
+          .domain([0, maxTotal])
+          .range([margin.left, barWidth - margin.right]);
+
+        // Update x-axis
+        barSvg
+          .select(".x-axis")
+          .transition()
+          .duration(isInitial ? 0 : 750)
+          .call(d3.axisTop(xScale).ticks(5));
+
+        // Update grid lines
+        const gridValues = xScale.ticks(5);
+
+        // Remove old grid lines
+        barSvg.selectAll(".grid-line").remove();
+
+        // Add new grid lines
+        barSvg
+          .selectAll(".grid-line")
+          .data(gridValues)
+          .enter()
+          .append("line")
+          .attr("class", "grid-line")
+          .attr("x1", (d) => xScale(d))
+          .attr("y1", margin.top)
+          .attr("x2", (d) => xScale(d))
+          .attr("y2", barHeight);
+
+        // Get sorted country IDs
+        const countryIds = Object.keys(data.countries);
+        countryIds.sort((a, b) => {
+          const totalA = data.world[year][a]?.total || 0;
+          const totalB = data.world[year][b]?.total || 0;
+          return totalB - totalA;
+        });
+
+        // Update existing bars or create new ones
+        countryIds.forEach((countryId) => {
+          const barGroup = d3.select(`#bar-${countryId}`);
+          const countryData = data.world[year][countryId];
+
+          if (!countryData) return;
+
+          // Remove existing bars
+          barGroup.selectAll(".bar").remove();
+          barGroup.selectAll(".value-label").remove();
+          barGroup.selectAll(".total-label").remove();
+
+          // Draw stacked bars
+          let xOffset = margin.left;
+          categories.forEach((category, catIndex) => {
+            const value = countryData.categories[category];
+            const barLength = xScale(value) - margin.left;
+
+            // Add bar
+            barGroup
+              .append("rect")
+              .attr("class", "bar")
+              .attr("x", xOffset)
+              .attr("y", 2)
+              .attr("width", barLength)
+              .attr("height", barHeight_perCountry - 4)
+              .attr("fill", categoryColors[catIndex]);
+
+            // Add label if bar is wide enough
+            if (barLength > 30) {
+              barGroup
+                .append("text")
+                .attr("class", "bar-label value-label")
+                .attr("x", xOffset + barLength / 2)
+                .attr("y", barHeight_perCountry / 2)
+                .attr("text-anchor", "middle")
+                .attr("alignment-baseline", "middle")
+                .style("fill", "white")
+                .style("font-size", "10px")
+                .style("pointer-events", "none")
+                .text(`${Math.round(value)}`);
+            }
+
+            xOffset += barLength;
+          });
+
+          // Add total value at the end
+          barGroup
+            .append("text")
+            .attr("class", "bar-label total-label")
+            .attr("x", xOffset + 10)
+            .attr("y", barHeight_perCountry / 2)
+            .attr("alignment-baseline", "middle")
+            .style("font-size", "10px")
+            .text(`Total: ${Math.round(countryData.total)}`);
+        });
+      }
+
+      let formatAsThousands = d3.format(",");
+      let latestHoverCountryId = null;
+
+      function handleCountryMouseOver(event, d) {
+        latestHoverCountryId = d.id;
+        // Highlight country
+        highlightCountry(d.id, false);
+
+        // Show tooltip
+        const year = years[currentYearIndex];
+        const countryData = data.world[year][d.id];
+        const countryName = data.countries[d.id]?.name || `Country-${d.id}`;
+
+        if (countryData) {
+          let tooltipContent = `<strong>${countryName}</strong><br>`;
+          tooltipContent += `<strong>Population: ${formatAsThousands(
+            countryData.population
+          )}</strong><br>`;
+          tooltipContent += `<strong>GDP: ${formatAsThousands(
+            countryData.gdp
+          )}</strong>`;
+
+          tooltip
+            .html(tooltipContent)
+            .style("left", event.pageX + 15 + "px")
+            .style("top", event.pageY - 28 + "px")
+            .transition()
+            .duration(200)
+            .style("opacity", 0.9);
+        }
+
+        // Scroll to the bar
+        scrollToCountry(d.id);
+      }
+
+      function handleCountryMouseOut(event, d) {
+        // Remove highlight if it's not the selected country
+        if (selectedCountry !== d.id) {
+          unhighlightCountry(d.id);
+        }
+
+        // Hide tooltip
+        tooltip.transition().duration(500).style("opacity", 0);
+      }
+
+      function handleCountryClick(event, d) {
+        if (selectedCountry === d.id) {
+          // Deselect if already selected
+          selectedCountry = null;
+          unhighlightCountry(d.id);
+        } else {
+          // Unhighlight previous selection
+          if (selectedCountry) {
+            unhighlightCountry(selectedCountry);
+          }
+
+          // Set new selection
+          selectedCountry = d.id;
+          highlightCountry(d.id, true);
+
+          // Scroll to the bar
+          scrollToCountry(d.id);
+        }
+      }
+
+      function handleBarMouseOver(event, countryId) {
+        // Highlight country on the map and bar
+        highlightCountry(countryId, false);
+
+        // Show tooltip
+        const year = years[currentYearIndex];
+        const countryData = data.world[year][countryId];
+        const countryName =
+          data.countries[countryId]?.name || `Country-${countryId}`;
+
+        if (countryData) {
+          let tooltipContent = `<strong>${countryName}</strong><br>`;
+          categories.forEach((category) => {
+            tooltipContent += `${category}: ${Math.round(
+              countryData.categories[category]
+            )}<br>`;
+          });
+          tooltipContent += `<strong>Total: ${Math.round(
+            countryData.total
+          )}</strong>`;
+
+          tooltip
+            .html(tooltipContent)
+            .style("left", event.pageX + 15 + "px")
+            .style("top", event.pageY - 28 + "px")
+            .transition()
+            .duration(200)
+            .style("opacity", 0.9);
+        }
+      }
+
+      function handleBarMouseOut(event, countryId) {
+        // Remove highlight if it's not the selected country
+        if (selectedCountry !== countryId) {
+          unhighlightCountry(countryId);
+        }
+
+        // Hide tooltip
+        tooltip.transition().duration(500).style("opacity", 0);
+      }
+
+      function handleBarClick(event, countryId) {
+        if (selectedCountry === countryId) {
+          // Deselect if already selected
+          selectedCountry = null;
+          unhighlightCountry(countryId);
+        } else {
+          // Unhighlight previous selection
+          if (selectedCountry) {
+            unhighlightCountry(selectedCountry);
+          }
+
+          // Set new selection
+          selectedCountry = countryId;
+          highlightCountry(countryId, true);
+        }
+      }
+
+      function highlightCountry(countryId, isPermanent) {
+        // Highlight map
+        d3.select(`#country-${countryId}`)
+          .classed("highlighted", true)
+          .transition()
+          .duration(200)
+          .attr("stroke", "#000")
+          .attr("stroke-width", 1.5);
+
+        // Highlight GDP circle if it exists
+        d3.select(`#gdp-${countryId}`)
+          .transition()
+          .duration(200)
+          .attr("stroke", "#000")
+          .attr("stroke-width", 1.5)
+          .attr("fill", "rgba(255, 165, 0, 0.8)"); // More opaque when highlighted
+
+        // Highlight bar
+        d3.select(`#bar-${countryId}`)
+          .classed("highlighted", true)
+          .transition()
+          .duration(200)
+          .select(".country-name")
+          .attr("font-weight", "bold");
+
+        d3.select(`#bar-${countryId}`)
+          .selectAll(".bar")
+          .attr("stroke", "#000")
+          .attr("stroke-width", 1);
+      }
+
+      function unhighlightCountry(countryId) {
+        // Remove highlight from map
+        d3.select(`#country-${countryId}`)
+          .classed("highlighted", false)
+          .transition()
+          .duration(200)
+          .attr("stroke", "#fff")
+          .attr("stroke-width", 0.5);
+
+        // Unhighlight GDP circle if it exists
+        d3.select(`#gdp-${countryId}`)
+          .transition()
+          .duration(200)
+          .attr("stroke", "orange")
+          .attr("stroke-width", 1)
+          .attr("fill", "rgba(255, 165, 0, 0.6)"); // Back to regular opacity
+
+        // Remove highlight from bar
+        d3.select(`#bar-${countryId}`)
+          .classed("highlighted", false)
+          .transition()
+          .duration(200)
+          .select(".country-name")
+          .attr("font-weight", "normal");
+
+        d3.select(`#bar-${countryId}`)
+          .selectAll(".bar")
+          .attr("stroke", null)
+          .attr("stroke-width", 0);
+      }
+
+      function scrollToCountry(countryId) {
+        // Find the index of the country in the sorted list
+        const year = years[currentYearIndex];
+        const countryIds = Object.keys(data.countries);
+
+        // Sort countries by total value descending
+        countryIds.sort((a, b) => {
+          const totalA = data.world[year][a]?.total || 0;
+          const totalB = data.world[year][b]?.total || 0;
+          return totalB - totalA;
+        });
+
+        const index = countryIds.indexOf(countryId);
+
+        if (index !== -1) {
+          // Calculate scroll position to center the bar
+          const yPosition = index * barHeight_perCountry + margin.top;
+          const scrollPosition =
+            yPosition - barChartVisibleHeight / 2 + barHeight_perCountry / 2;
+
+          // Apply scroll with smooth transition
+          d3.select("#scrollable-bars")
+            .transition()
+            .duration(500)
+            .style(
+              "transform",
+              `translateY(-${Math.max(
+                0,
+                Math.min(barHeight - barChartVisibleHeight, scrollPosition)
+              )}px)`
+            );
+        }
+      }
+
+      // Add circles to represent GDP for each country
+      function addGDPCircles() {
+        // Remove any existing GDP circles first
+        mapSvg.selectAll(".gdp-circle").remove();
+
+        const year = years[currentYearIndex];
+        const countryCentroids = {};
+
+        // Calculate the centroids for each country
+        mapSvg.selectAll(".country").each(function (d) {
+          const centroid = path.centroid(d);
+          if (!isNaN(centroid[0]) && !isNaN(centroid[1])) {
+            countryCentroids[d.id] = centroid;
+          }
+        });
+
+        // Scale for circle radius based on GDP
+        const gdpValues = Object.keys(data.world[year])
+          .map((key) => data.world[year][key]?.gdp || 0)
+          .filter((gdp) => gdp > 0);
+
+        const maxGDP = d3.max(gdpValues);
+
+        // const radiusScale = d3.scaleSqrt().domain([0, maxGDP]).range([0, 20]); // Max radius of 20px
+
+        // Use log scale for better distribution with large value ranges
+        const radiusScale = d3
+          .scaleSqrt()
+          .domain([1, maxGDP]) // Start at 1 to avoid log(0)
+          .range([2, 12]); // Smaller maximum radius (12px instead of 20px)
+
+        // Add circles for each country with data
+        Object.keys(data.world[year]).forEach((countryId) => {
+          const countryData = data.world[year][countryId];
+          if (!countryData || !countryData.gdp || !countryCentroids[countryId])
+            return;
+
+          // const radius = radiusScale(countryData.gdp);
+
+          // Apply a minimum value to avoid log(0) issues
+          const gdpValue = Math.max(1, countryData.gdp);
+          const radius = radiusScale(gdpValue);
+
+          if (radius <= 0) return;
+
+          mapSvg
+            .append("circle")
+            .attr("class", "gdp-circle")
+            .attr("id", `gdp-${countryId}`)
+            .attr("cx", countryCentroids[countryId][0])
+            .attr("cy", countryCentroids[countryId][1])
+            .attr("r", 0) // Start with radius 0 for transition
+            .attr("fill", "rgba(255, 165, 0, 0.6)") // Orange with transparency
+            .attr("stroke", "orange")
+            .attr("stroke-width", 1)
+            .attr("pointer-events", "none") // Let events pass through to country
+            .attr("transform", currentTransform)
+            .style("opacity", showGDPCircles ? 1 : 0)
+            .transition()
+            .duration(750)
+            .attr("r", radius);
+        });
+      }
+
+      // Add GDP to the map legend
+      function circleLegend() {
+        // Add GDP circle legend
+        const legendContainer = d3.select("#legend");
+
+        // Remove any existing GDP legend
+        legendContainer.selectAll(".gdp-legend").remove();
+
+        // Add GDP legend title
+        const gdpLegend = legendContainer
+          .append("div")
+          .attr("class", "gdp-legend")
+          .style("margin-top", "15px")
+          .style("border-top", "1px solid #ddd")
+          .style("padding-top", "10px")
+          .style("width", "100%");
+
+        gdpLegend
+          .append("div")
+          .style("display", "inline")
+          .style("font-weight", "bold")
+          .text("GDP (Circle Size):");
+
+        const year = years[currentYearIndex];
+
+        // Get max GDP for scaling
+        const maxGDP = d3.max(
+          Object.values(data.world[year]),
+          (d) => d?.gdp || 0
+        );
+
+        const radiusScale = d3.scaleSqrt().domain([0, maxGDP]).range([0, 20]);
+
+        // Create legend items
+        const legendItems = gdpLegend
+          .append("div")
+          .style("display", "inline")
+          .style("align-items", "center")
+          .style("margin-top", "5px");
+
+        const radius = radiusScale(1000000);
+
+        legendItems
+          .append("svg")
+          .attr("width", radius * 2 + 4)
+          .attr("height", radius * 2 + 4)
+          .append("circle")
+          .attr("cx", radius + 2)
+          .attr("cy", radius + 2)
+          .attr("r", radius)
+          .attr("fill", "rgba(255, 165, 0, 0.6)")
+          .attr("stroke", "orange")
+          .attr("stroke-width", 1);
+      }
+
+      // Add a checkbox to toggle GDP circles
+      const controlsDiv = d3.select(".controls");
+
+      // Create a container for the checkbox and label with proper styling
+      const checkboxContainer = controlsDiv
+        .append("div")
+        .style("display", "flex")
+        .style("align-items", "center")
+        .style("margin-left", "20px");
+
+      // Add the checkbox
+      const gdpToggle = checkboxContainer
+        .append("input")
+        .attr("type", "checkbox")
+        .attr("id", "gdp-toggle")
+        .attr("checked", true) // Initially checked
+        .style("margin-right", "5px")
+        .on("change", toggleGDPCircles);
+
+      // Add the label
+      checkboxContainer
+        .append("label")
+        .attr("for", "gdp-toggle")
+        .style("font-size", "14px")
+        .text("Show GDP Circles");
+
+      // Global variable to track visibility state
+      let showGDPCircles = true;
+
+      // Function to toggle GDP circles
+      function toggleGDPCircles() {
+        showGDPCircles = this.checked;
+
+        // Update the circle visibility
+        if (showGDPCircles) {
+          // Show circles with transition
+          mapSvg
+            .selectAll(".gdp-circle")
+            .transition()
+            .duration(300)
+            .style("opacity", 1);
+
+          // Also show the legend
+          d3.select(".gdp-legend")
+            .transition()
+            .duration(300)
+            .style("opacity", 1);
+        } else {
+          // Hide circles with transition
+          mapSvg
+            .selectAll(".gdp-circle")
+            .transition()
+            .duration(300)
+            .style("opacity", 0);
+
+          // Also hide the legend
+          d3.select(".gdp-legend")
+            .transition()
+            .duration(300)
+            .style("opacity", 0);
+        }
+      }
+    </script>
+  </body>
+</html>
