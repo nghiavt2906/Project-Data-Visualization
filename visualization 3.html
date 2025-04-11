@@ -171,6 +171,36 @@
         background-color: #e8e8e8;
       }
     </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Global CO2 Emissions by Source (1800-2023)</h1>
+
+      <div class="visualization">
+        <div class="map-container" id="map"></div>
+        <div class="bar-container" id="bar-chart">
+          <div class="scrollable-bars" id="scrollable-bars"></div>
+        </div>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="controls">
+        <button id="play-button">▶ Play</button>
+        <div class="slider-container">
+          <input
+            type="range"
+            id="year-slider"
+            min="0"
+            max="9"
+            value="0"
+            step="1"
+          />
+          <div class="slider-ticks" id="slider-ticks"></div>
+        </div>
+        <div class="year-display" id="year-display">2010</div>
+      </div>
+    </div>
 
     <script>
       const mapWidth = 550;
@@ -1050,35 +1080,5 @@
         }
       }
     </script>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Global CO2 Emissions by Source (1800-2023)</h1>
-
-      <div class="visualization">
-        <div class="map-container" id="map"></div>
-        <div class="bar-container" id="bar-chart">
-          <div class="scrollable-bars" id="scrollable-bars"></div>
-        </div>
-      </div>
-
-      <div class="legend" id="legend"></div>
-
-      <div class="controls">
-        <button id="play-button">▶ Play</button>
-        <div class="slider-container">
-          <input
-            type="range"
-            id="year-slider"
-            min="0"
-            max="9"
-            value="0"
-            step="1"
-          />
-          <div class="slider-ticks" id="slider-ticks"></div>
-        </div>
-        <div class="year-display" id="year-display">2010</div>
-      </div>
-    </div>
   </body>
 </html>
