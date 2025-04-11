@@ -171,43 +171,12 @@
         background-color: #e8e8e8;
       }
     </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Global CO2 Emissions by Source (1800-2023)</h1>
-
-      <div class="visualization">
-        <div class="map-container" id="map"></div>
-        <div class="bar-container" id="bar-chart">
-          <div class="scrollable-bars" id="scrollable-bars"></div>
-        </div>
-      </div>
-
-      <div class="legend" id="legend"></div>
-
-      <div class="controls">
-        <button id="play-button">▶ Play</button>
-        <div class="slider-container">
-          <input
-            type="range"
-            id="year-slider"
-            min="0"
-            max="9"
-            value="0"
-            step="1"
-          />
-          <div class="slider-ticks" id="slider-ticks"></div>
-        </div>
-        <div class="year-display" id="year-display">2010</div>
-      </div>
-    </div>
 
     <script>
-      // Configuration
       const mapWidth = 550;
       const mapHeight = 500;
       const barWidth = 550;
-      const barHeight = 3000; // Long enough to fit all countries
+      const barHeight = 3000;
       const barChartVisibleHeight = 600;
       const barHeight_perCountry = 25;
       const margin = { top: 30, right: 120, bottom: 10, left: 150 };
@@ -215,7 +184,6 @@
       for (let i = 1800; i <= 2023; i++) {
         years.push(i);
       }
-      // const categories = ["Industry", "Agriculture", "Services"];
       const categories = [
         "cement_co2",
         "coal_co2",
@@ -235,12 +203,10 @@
         "#e377c2",
       ];
 
-      // Generate synthetic data
       function generateData() {
         const countries = {};
         const world = {};
 
-        // Create synthetic data for each year
         years.forEach((year) => {
           world[year] = {};
         });
@@ -257,7 +223,6 @@
       let dragStartY = 0;
       let currentScrollY = 0;
 
-      // Set up map projection
       const projection = d3
         .geoNaturalEarth1()
         .scale(mapWidth / 6)
@@ -265,33 +230,28 @@
 
       const path = d3.geoPath().projection(projection);
 
-      // Create SVG for map
       const mapSvg = d3
         .select("#map")
         .append("svg")
         .attr("width", mapWidth)
         .attr("height", mapHeight);
 
-      // Create SVG for bar chart
       const barSvg = d3
         .select("#scrollable-bars")
         .append("svg")
         .attr("width", barWidth)
         .attr("height", barHeight);
 
-      // Create tooltip
       const tooltip = d3
         .select("body")
         .append("div")
         .attr("class", "tooltip")
         .style("opacity", 0);
 
-      // Create color scales
       const colorScale = d3
         .scaleSequential(d3.interpolateBlues)
         .domain([0, 100]);
 
-      // Add category legend
       const legend = d3.select("#legend");
 
       categories.forEach((category, i) => {
@@ -305,21 +265,14 @@
         legendItem.append("span").text(category);
       });
 
-      // Set up slider ticks
-      // const sliderTicks = d3.select("#slider-ticks");
-      // years.forEach((year, index) => {
-      //   sliderTicks.append("div").attr("class", "tick").text(year);
-      // });
       const sliderTicks = d3.select("#slider-ticks");
-      sliderTicks.selectAll("*").remove(); // Clear existing ticks
+      sliderTicks.selectAll("*").remove();
 
       const totalYears = years.length;
-      const maxTicks = 10; // Maximum number of ticks to show to prevent overlap
+      const maxTicks = 10;
 
-      // Calculate step size to limit the number of displayed ticks
       const stepSize = Math.ceil(totalYears / maxTicks);
 
-      // Only show subset of years based on step size
       for (let i = 0; i < totalYears; i += stepSize) {
         sliderTicks
           .append("div")
@@ -328,7 +281,6 @@
           .text(years[i]);
       }
 
-      // Always show the last year
       if ((totalYears - 1) % stepSize !== 0) {
         sliderTicks
           .append("div")
@@ -337,7 +289,6 @@
           .text(years[totalYears - 1]);
       }
 
-      // Set up slider and play button
       const yearSlider = d3.select("#year-slider");
       const yearDisplay = d3.select("#year-display");
       const playButton = d3.select("#play-button");
@@ -386,7 +337,6 @@
         updateVisualization(false);
       }
 
-      // Setup dragging for bar chart
       const barContainer = d3.select("#bar-chart");
       const scrollableDiv = d3.select("#scrollable-bars");
 
@@ -398,10 +348,8 @@
             scrollableDiv.style("transform").replace("translateY(", "")
           ) || 0;
 
-        // Disable transition during dragging
         scrollableDiv.style("transition", "none");
 
-        // Prevent default behavior to avoid text selection
         event.preventDefault();
       });
 
@@ -422,17 +370,14 @@
       d3.select("body").on("mouseup", function () {
         if (isDragging) {
           isDragging = false;
-          // Restore transition after dragging
           scrollableDiv.style("transition", "transform 0.5s");
         }
       });
 
-      // Prevent drag conflicts
       barContainer.on("click", function (event) {
         event.stopPropagation();
       });
 
-      // Load world map data
       d3.json("countries-110m.json").then(async function (worldData) {
         const countries = topojson.feature(
           worldData,
@@ -441,7 +386,6 @@
 
         const co2Data = await d3.json("co2-data-preprocessed-vis-3.json");
 
-        // Generate random data for each country
         countries.forEach((country) => {
           const countryName =
             country.properties.name || `Country-${country.id}`;
@@ -451,14 +395,11 @@
           };
 
           function scalePopulation(population, base = 10, multiplier = 1) {
-            // Avoid log(0) which is -Infinity
             if (population <= 0) return 0;
 
-            // Apply logarithmic scaling
             return (Math.log(population) / Math.log(base)) * multiplier;
           }
 
-          // Generate yearly data with varying totals
           years.forEach((year) => {
             if (!data.world[year][country.id]) {
               data.world[year][country.id] = {
@@ -484,7 +425,6 @@
           });
         });
 
-        // Draw map
         mapSvg
           .selectAll(".country")
           .data(countries)
@@ -497,13 +437,11 @@
           .on("mouseout", handleCountryMouseOut)
           .on("click", handleCountryClick);
 
-        // Add x-axis for the bar chart
         const xScale = d3
           .scaleLinear()
-          .domain([0, 300]) // Max value is 300
+          .domain([0, 300])
           .range([margin.left, barWidth - margin.right]);
 
-        // Add axis at the top
         const xAxis = d3.axisTop(xScale).ticks(5);
 
         barSvg
@@ -512,7 +450,6 @@
           .attr("transform", `translate(0, ${margin.top - 10})`)
           .call(xAxis);
 
-        // Add vertical grid lines
         const gridValues = xScale.ticks(5);
         barSvg
           .selectAll(".grid-line")
@@ -525,10 +462,8 @@
           .attr("x2", (d) => xScale(d))
           .attr("y2", barHeight);
 
-        // Set up bar chart
         initializeBarChart(xScale);
 
-        // Initial update
         updateVisualization(true);
 
         circleLegend();
@@ -538,14 +473,12 @@
         const countryIds = Object.keys(data.countries);
         const year = years[currentYearIndex];
 
-        // Sort countries by total value descending
         countryIds.sort((a, b) => {
           const totalA = data.world[year][a]?.total || 0;
           const totalB = data.world[year][b]?.total || 0;
           return totalB - totalA;
         });
 
-        // Create group for each country
         barSvg
           .selectAll(".bar-group")
           .data(countryIds)
@@ -561,7 +494,6 @@
           .on("mouseout", handleBarMouseOut)
           .on("click", handleBarClick);
 
-        // Add country labels
         barSvg
           .selectAll(".bar-group")
           .append("text")
@@ -573,11 +505,10 @@
           .text((d) => data.countries[d].name);
       }
 
-      // Add zoom and pan functionality to the map
       let currentTransform = d3.zoomIdentity;
       const mapZoom = d3
         .zoom()
-        .scaleExtent([1, 8]) // Min and max zoom levels
+        .scaleExtent([1, 8])
         .on("zoom", (event) => {
           currentTransform = event.transform;
           mapSvg
@@ -585,10 +516,8 @@
             .attr("transform", event.transform);
         });
 
-      // Apply zoom to map SVG
-      mapSvg.call(mapZoom).on("dblclick.zoom", null); // Disable double-click zoom
+      mapSvg.call(mapZoom).on("dblclick.zoom", null);
 
-      // Add reset button for map zoom
       const resetButton = d3
         .select(".container")
         .insert("button", ".visualization")
@@ -616,7 +545,6 @@
         const year = years[currentYearIndex];
         yearDisplay.text(year);
 
-        // Sort countries by total value descending
         const countryIds = Object.keys(data.countries);
         countryIds.sort((a, b) => {
           const totalA = data.world[year][a]?.total || 0;
@@ -624,7 +552,6 @@
           return totalB - totalA;
         });
 
-        // Update choropleth
         const maxScaled = {};
         for (const year of years) {
           maxScaled[year] = d3.max(
@@ -641,22 +568,17 @@
             const countryData = data.world[year][d.id];
 
             if (countryData) {
-              // Use services as the choropleth value
               return countryData["population"] == 0
                 ? "grey"
                 : colorScale(
                     (countryData["scaledPopulation"] / maxScaled[year]) * 100
                   );
             }
-            return "#ccc"; // Default color for countries without data
+            return "#ccc";
           });
-        // .attr("stroke", "#000")
-        // .attr("stroke-width", 0.5);
 
-        // Add GDP circles
         addGDPCircles();
 
-        // Update bar positions based on new sort order
         countryIds.forEach((countryId, index) => {
           const barGroup = d3.select(`#bar-${countryId}`);
 
@@ -669,10 +591,8 @@
             );
         });
 
-        // Update bars
         updateBars(isInitial);
 
-        // If a country is selected, keep it highlighted
         if (selectedCountry) {
           highlightCountry(selectedCountry, true);
         }
@@ -696,7 +616,6 @@
       function updateBars(isInitial) {
         const year = years[currentYearIndex];
 
-        // Create the scale here to use latest data
         const maxTotal = d3.max(
           Object.values(data.world[year]),
           (d) => d?.total || 0
@@ -706,20 +625,16 @@
           .domain([0, maxTotal])
           .range([margin.left, barWidth - margin.right]);
 
-        // Update x-axis
         barSvg
           .select(".x-axis")
           .transition()
           .duration(isInitial ? 0 : 750)
           .call(d3.axisTop(xScale).ticks(5));
 
-        // Update grid lines
         const gridValues = xScale.ticks(5);
 
-        // Remove old grid lines
         barSvg.selectAll(".grid-line").remove();
 
-        // Add new grid lines
         barSvg
           .selectAll(".grid-line")
           .data(gridValues)
@@ -731,7 +646,6 @@
           .attr("x2", (d) => xScale(d))
           .attr("y2", barHeight);
 
-        // Get sorted country IDs
         const countryIds = Object.keys(data.countries);
         countryIds.sort((a, b) => {
           const totalA = data.world[year][a]?.total || 0;
@@ -739,25 +653,21 @@
           return totalB - totalA;
         });
 
-        // Update existing bars or create new ones
         countryIds.forEach((countryId) => {
           const barGroup = d3.select(`#bar-${countryId}`);
           const countryData = data.world[year][countryId];
 
           if (!countryData) return;
 
-          // Remove existing bars
           barGroup.selectAll(".bar").remove();
           barGroup.selectAll(".value-label").remove();
           barGroup.selectAll(".total-label").remove();
 
-          // Draw stacked bars
           let xOffset = margin.left;
           categories.forEach((category, catIndex) => {
             const value = countryData.categories[category];
             const barLength = xScale(value) - margin.left;
 
-            // Add bar
             barGroup
               .append("rect")
               .attr("class", "bar")
@@ -767,7 +677,6 @@
               .attr("height", barHeight_perCountry - 4)
               .attr("fill", categoryColors[catIndex]);
 
-            // Add label if bar is wide enough
             if (barLength > 30) {
               barGroup
                 .append("text")
@@ -785,7 +694,6 @@
             xOffset += barLength;
           });
 
-          // Add total value at the end
           barGroup
             .append("text")
             .attr("class", "bar-label total-label")
@@ -802,10 +710,8 @@
 
       function handleCountryMouseOver(event, d) {
         latestHoverCountryId = d.id;
-        // Highlight country
         highlightCountry(d.id, false);
 
-        // Show tooltip
         const year = years[currentYearIndex];
         const countryData = data.world[year][d.id];
         const countryName = data.countries[d.id]?.name || `Country-${d.id}`;
@@ -828,45 +734,36 @@
             .style("opacity", 0.9);
         }
 
-        // Scroll to the bar
         scrollToCountry(d.id);
       }
 
       function handleCountryMouseOut(event, d) {
-        // Remove highlight if it's not the selected country
         if (selectedCountry !== d.id) {
           unhighlightCountry(d.id);
         }
 
-        // Hide tooltip
         tooltip.transition().duration(500).style("opacity", 0);
       }
 
       function handleCountryClick(event, d) {
         if (selectedCountry === d.id) {
-          // Deselect if already selected
           selectedCountry = null;
           unhighlightCountry(d.id);
         } else {
-          // Unhighlight previous selection
           if (selectedCountry) {
             unhighlightCountry(selectedCountry);
           }
 
-          // Set new selection
           selectedCountry = d.id;
           highlightCountry(d.id, true);
 
-          // Scroll to the bar
           scrollToCountry(d.id);
         }
       }
 
       function handleBarMouseOver(event, countryId) {
-        // Highlight country on the map and bar
         highlightCountry(countryId, false);
 
-        // Show tooltip
         const year = years[currentYearIndex];
         const countryData = data.world[year][countryId];
         const countryName =
@@ -894,34 +791,28 @@
       }
 
       function handleBarMouseOut(event, countryId) {
-        // Remove highlight if it's not the selected country
         if (selectedCountry !== countryId) {
           unhighlightCountry(countryId);
         }
 
-        // Hide tooltip
         tooltip.transition().duration(500).style("opacity", 0);
       }
 
       function handleBarClick(event, countryId) {
         if (selectedCountry === countryId) {
-          // Deselect if already selected
           selectedCountry = null;
           unhighlightCountry(countryId);
         } else {
-          // Unhighlight previous selection
           if (selectedCountry) {
             unhighlightCountry(selectedCountry);
           }
 
-          // Set new selection
           selectedCountry = countryId;
           highlightCountry(countryId, true);
         }
       }
 
       function highlightCountry(countryId, isPermanent) {
-        // Highlight map
         d3.select(`#country-${countryId}`)
           .classed("highlighted", true)
           .transition()
@@ -929,15 +820,13 @@
           .attr("stroke", "#000")
           .attr("stroke-width", 1.5);
 
-        // Highlight GDP circle if it exists
         d3.select(`#gdp-${countryId}`)
           .transition()
           .duration(200)
           .attr("stroke", "#000")
           .attr("stroke-width", 1.5)
-          .attr("fill", "rgba(255, 165, 0, 0.8)"); // More opaque when highlighted
+          .attr("fill", "rgba(255, 165, 0, 0.8)");
 
-        // Highlight bar
         d3.select(`#bar-${countryId}`)
           .classed("highlighted", true)
           .transition()
@@ -952,7 +841,6 @@
       }
 
       function unhighlightCountry(countryId) {
-        // Remove highlight from map
         d3.select(`#country-${countryId}`)
           .classed("highlighted", false)
           .transition()
@@ -960,15 +848,13 @@
           .attr("stroke", "#fff")
           .attr("stroke-width", 0.5);
 
-        // Unhighlight GDP circle if it exists
         d3.select(`#gdp-${countryId}`)
           .transition()
           .duration(200)
           .attr("stroke", "orange")
           .attr("stroke-width", 1)
-          .attr("fill", "rgba(255, 165, 0, 0.6)"); // Back to regular opacity
+          .attr("fill", "rgba(255, 165, 0, 0.6)");
 
-        // Remove highlight from bar
         d3.select(`#bar-${countryId}`)
           .classed("highlighted", false)
           .transition()
@@ -983,11 +869,9 @@
       }
 
       function scrollToCountry(countryId) {
-        // Find the index of the country in the sorted list
         const year = years[currentYearIndex];
         const countryIds = Object.keys(data.countries);
 
-        // Sort countries by total value descending
         countryIds.sort((a, b) => {
           const totalA = data.world[year][a]?.total || 0;
           const totalB = data.world[year][b]?.total || 0;
@@ -997,12 +881,10 @@
         const index = countryIds.indexOf(countryId);
 
         if (index !== -1) {
-          // Calculate scroll position to center the bar
           const yPosition = index * barHeight_perCountry + margin.top;
           const scrollPosition =
             yPosition - barChartVisibleHeight / 2 + barHeight_perCountry / 2;
 
-          // Apply scroll with smooth transition
           d3.select("#scrollable-bars")
             .transition()
             .duration(500)
@@ -1016,15 +898,12 @@
         }
       }
 
-      // Add circles to represent GDP for each country
       function addGDPCircles() {
-        // Remove any existing GDP circles first
         mapSvg.selectAll(".gdp-circle").remove();
 
         const year = years[currentYearIndex];
         const countryCentroids = {};
 
-        // Calculate the centroids for each country
         mapSvg.selectAll(".country").each(function (d) {
           const centroid = path.centroid(d);
           if (!isNaN(centroid[0]) && !isNaN(centroid[1])) {
@@ -1032,20 +911,13 @@
           }
         });
 
-        // Scale for circle radius based on GDP
         const gdpValues = Object.keys(data.world[year])
           .map((key) => data.world[year][key]?.gdp || 0)
           .filter((gdp) => gdp > 0);
 
         const maxGDP = d3.max(gdpValues);
 
-        // const radiusScale = d3.scaleSqrt().domain([0, maxGDP]).range([0, 20]); // Max radius of 20px
-
-        // Use log scale for better distribution with large value ranges
-        const radiusScale = d3
-          .scaleSqrt()
-          .domain([1, maxGDP]) // Start at 1 to avoid log(0)
-          .range([2, 12]); // Smaller maximum radius (12px instead of 20px)
+        const radiusScale = d3.scaleSqrt().domain([1, maxGDP]).range([2, 12]);
 
         // Add circles for each country with data
         Object.keys(data.world[year]).forEach((countryId) => {
@@ -1053,9 +925,6 @@
           if (!countryData || !countryData.gdp || !countryCentroids[countryId])
             return;
 
-          // const radius = radiusScale(countryData.gdp);
-
-          // Apply a minimum value to avoid log(0) issues
           const gdpValue = Math.max(1, countryData.gdp);
           const radius = radiusScale(gdpValue);
 
@@ -1067,11 +936,11 @@
             .attr("id", `gdp-${countryId}`)
             .attr("cx", countryCentroids[countryId][0])
             .attr("cy", countryCentroids[countryId][1])
-            .attr("r", 0) // Start with radius 0 for transition
-            .attr("fill", "rgba(255, 165, 0, 0.6)") // Orange with transparency
+            .attr("r", 0)
+            .attr("fill", "rgba(255, 165, 0, 0.6)")
             .attr("stroke", "orange")
             .attr("stroke-width", 1)
-            .attr("pointer-events", "none") // Let events pass through to country
+            .attr("pointer-events", "none")
             .attr("transform", currentTransform)
             .style("opacity", showGDPCircles ? 1 : 0)
             .transition()
@@ -1080,15 +949,11 @@
         });
       }
 
-      // Add GDP to the map legend
       function circleLegend() {
-        // Add GDP circle legend
         const legendContainer = d3.select("#legend");
 
-        // Remove any existing GDP legend
         legendContainer.selectAll(".gdp-legend").remove();
 
-        // Add GDP legend title
         const gdpLegend = legendContainer
           .append("div")
           .attr("class", "gdp-legend")
@@ -1105,7 +970,6 @@
 
         const year = years[currentYearIndex];
 
-        // Get max GDP for scaling
         const maxGDP = d3.max(
           Object.values(data.world[year]),
           (d) => d?.gdp || 0
@@ -1113,7 +977,6 @@
 
         const radiusScale = d3.scaleSqrt().domain([0, maxGDP]).range([0, 20]);
 
-        // Create legend items
         const legendItems = gdpLegend
           .append("div")
           .style("display", "inline")
@@ -1135,62 +998,51 @@
           .attr("stroke-width", 1);
       }
 
-      // Add a checkbox to toggle GDP circles
       const controlsDiv = d3.select(".controls");
 
-      // Create a container for the checkbox and label with proper styling
       const checkboxContainer = controlsDiv
         .append("div")
         .style("display", "flex")
         .style("align-items", "center")
         .style("margin-left", "20px");
 
-      // Add the checkbox
       const gdpToggle = checkboxContainer
         .append("input")
         .attr("type", "checkbox")
         .attr("id", "gdp-toggle")
-        .attr("checked", true) // Initially checked
+        .attr("checked", true)
         .style("margin-right", "5px")
         .on("change", toggleGDPCircles);
 
-      // Add the label
       checkboxContainer
         .append("label")
         .attr("for", "gdp-toggle")
         .style("font-size", "14px")
         .text("Show GDP Circles");
 
-      // Global variable to track visibility state
       let showGDPCircles = true;
 
-      // Function to toggle GDP circles
       function toggleGDPCircles() {
         showGDPCircles = this.checked;
 
-        // Update the circle visibility
         if (showGDPCircles) {
-          // Show circles with transition
           mapSvg
             .selectAll(".gdp-circle")
             .transition()
             .duration(300)
             .style("opacity", 1);
 
-          // Also show the legend
           d3.select(".gdp-legend")
             .transition()
             .duration(300)
             .style("opacity", 1);
         } else {
-          // Hide circles with transition
           mapSvg
             .selectAll(".gdp-circle")
             .transition()
             .duration(300)
             .style("opacity", 0);
 
-          // Also hide the legend
           d3.select(".gdp-legend")
             .transition()
             .duration(300)
@@ -1198,5 +1050,35 @@
         }
       }
     </script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Global CO2 Emissions by Source (1800-2023)</h1>
+
+      <div class="visualization">
+        <div class="map-container" id="map"></div>
+        <div class="bar-container" id="bar-chart">
+          <div class="scrollable-bars" id="scrollable-bars"></div>
+        </div>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="controls">
+        <button id="play-button">▶ Play</button>
+        <div class="slider-container">
+          <input
+            type="range"
+            id="year-slider"
+            min="0"
+            max="9"
+            value="0"
+            step="1"
+          />
+          <div class="slider-ticks" id="slider-ticks"></div>
+        </div>
+        <div class="year-display" id="year-display">2010</div>
+      </div>
+    </div>
   </body>
 </html>
